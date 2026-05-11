@@ -1,3 +1,5 @@
+This fork repo is under development currently, and is NOT YET fully compatible with codex-cli.
+
 <p align="center">
   <img src="assets/banner.png" alt="agentmemory — Persistent memory for AI coding agents" width="720" />
 </p>
