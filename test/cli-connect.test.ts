@@ -180,6 +180,70 @@ describe("agentmemory connect — claude-code adapter (mock filesystem)", () => 
   });
 });
 
+describe("agentmemory connect — codex adapter helpers", () => {
+  it("builds codex mcp add args with a local default URL", async () => {
+    const { buildCodexMcpAddArgs } = await import(
+      "../src/cli/connect/codex.js?t=" + Date.now()
+    );
+
+    expect(buildCodexMcpAddArgs({})).toEqual([
+      "mcp",
+      "add",
+      "--env",
+      "AGENTMEMORY_URL=http://localhost:3111",
+      "agentmemory",
+      "--",
+      "npx",
+      "-y",
+      "@agentmemory/mcp",
+    ]);
+  });
+
+  it("passes explicit Codex MCP env values through to codex mcp add", async () => {
+    const { buildCodexMcpAddArgs } = await import(
+      "../src/cli/connect/codex.js?t=" + Date.now()
+    );
+
+    expect(
+      buildCodexMcpAddArgs({
+        AGENTMEMORY_URL: "https://memory.example.com",
+        AGENTMEMORY_SECRET: "secret-value",
+      }),
+    ).toEqual([
+      "mcp",
+      "add",
+      "--env",
+      "AGENTMEMORY_URL=https://memory.example.com",
+      "--env",
+      "AGENTMEMORY_SECRET=secret-value",
+      "agentmemory",
+      "--",
+      "npx",
+      "-y",
+      "@agentmemory/mcp",
+    ]);
+  });
+
+  it("recognizes codex mcp get output for the agentmemory stdio server", async () => {
+    const { getOutputLooksWired } = await import(
+      "../src/cli/connect/codex.js?t=" + Date.now()
+    );
+
+    expect(
+      getOutputLooksWired(`
+agentmemory
+  enabled: true
+  transport: stdio
+  command: npx
+  args: -y @agentmemory/mcp
+`),
+    ).toBe(true);
+    expect(getOutputLooksWired("No MCP server named 'agentmemory' found.")).toBe(
+      false,
+    );
+  });
+});
+
 describe("agentmemory connect — stub adapters log + return stub", () => {
   it("hermes adapter returns stub regardless of detect", async () => {
     const { adapter } = await import("../src/cli/connect/hermes.js");

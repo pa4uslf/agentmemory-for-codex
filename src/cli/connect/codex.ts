@@ -1,6 +1,7 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { existsSync } from "node:fs";
 import { homedir } from "node:os";
-import { join, dirname } from "node:path";
+import { join } from "node:path";
 import * as p from "@clack/prompts";
 import type { ConnectAdapter, ConnectOptions, ConnectResult } from "./types.js";
 import {
@@ -20,44 +21,56 @@ import {
 const CODEX_DIR = join(homedir(), ".codex");
 const CODEX_TOML = join(CODEX_DIR, "config.toml");
 const CODEX_HOOKS = join(CODEX_DIR, "hooks.json");
+const MCP_NAME = "agentmemory";
+const MCP_COMMAND = ["npx", "-y", "@agentmemory/mcp"] as const;
+const DEFAULT_AGENTMEMORY_URL = "http://localhost:3111";
 
-const TOML_BLOCK = `[mcp_servers.agentmemory]
-command = "npx"
-args = ["-y", "@agentmemory/mcp"]
+export function buildCodexMcpAddArgs(env: NodeJS.ProcessEnv = process.env): string[] {
+  const args = [
+    "mcp",
+    "add",
+    "--env",
+    `AGENTMEMORY_URL=${env["AGENTMEMORY_URL"] || DEFAULT_AGENTMEMORY_URL}`,
+  ];
 
-[mcp_servers.agentmemory.env]
-AGENTMEMORY_URL = "http://localhost:3111"
-`;
+  if (env["AGENTMEMORY_SECRET"]) {
+    args.push("--env", `AGENTMEMORY_SECRET=${env["AGENTMEMORY_SECRET"]}`);
+  }
 
-const SECTION_HEADER = "[mcp_servers.agentmemory]";
-
-function isWiredText(toml: string): boolean {
-  return toml.includes(SECTION_HEADER);
+  args.push(MCP_NAME, "--", ...MCP_COMMAND);
+  return args;
 }
 
-function stripExistingBlock(toml: string): string {
-  const lines = toml.split(/\r?\n/);
-  const out: string[] = [];
-  let skipping = false;
-  for (const line of lines) {
-    const trimmed = line.trim();
-    if (
-      trimmed === SECTION_HEADER ||
-      trimmed === "[mcp_servers.agentmemory.env]"
-    ) {
-      skipping = true;
-      continue;
-    }
-    if (
-      skipping &&
-      trimmed.startsWith("[") &&
-      trimmed !== "[mcp_servers.agentmemory.env]"
-    ) {
-      skipping = false;
-    }
-    if (!skipping) out.push(line);
+export function getOutputLooksWired(output: string): boolean {
+  return (
+    output.includes(MCP_NAME) &&
+    output.includes(MCP_COMMAND[0]) &&
+    output.includes("@agentmemory/mcp")
+  );
+}
+
+function runCodex(args: string[]): string {
+  return execFileSync("codex", args, {
+    encoding: "utf-8",
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+}
+
+function hasCodexCli(): boolean {
+  try {
+    runCodex(["--version"]);
+    return true;
+  } catch {
+    return false;
   }
-  return out.join("\n").replace(/\n{3,}$/, "\n\n").trimEnd() + "\n";
+}
+
+function getExistingCodexServer(): string | null {
+  try {
+    return runCodex(["mcp", "get", MCP_NAME]);
+  } catch {
+    return null;
+  }
 }
 
 export const adapter: ConnectAdapter = {
@@ -68,13 +81,12 @@ export const adapter: ConnectAdapter = {
     "→ Using MCP. Hooks ship via the Codex plugin; on Codex Desktop, also pass --with-hooks to install the global hooks.json workaround for openai/codex#16430.",
 
   detect(): boolean {
-    return existsSync(CODEX_DIR);
+    return existsSync(CODEX_DIR) || hasCodexCli();
   },
 
   async install(opts: ConnectOptions): Promise<ConnectResult> {
-    const exists = existsSync(CODEX_TOML);
-    const current = exists ? readFileSync(CODEX_TOML, "utf-8") : "";
-    const wired = isWiredText(current);
+    const existing = getExistingCodexServer();
+    const wired = existing !== null;
 
     if (wired && !opts.force) {
       logAlreadyWired("Codex CLI", CODEX_TOML);
@@ -83,29 +95,28 @@ export const adapter: ConnectAdapter = {
 
     if (opts.dryRun) {
       p.log.info(
-        `[dry-run] Would ${wired ? "rewrite" : "append"} [mcp_servers.agentmemory] in ${CODEX_TOML}`,
+        `[dry-run] Would run: codex ${buildCodexMcpAddArgs().join(" ")}`,
       );
       if (opts.withHooks) installCodexHooks(opts);
       return { kind: "installed", mutatedPath: CODEX_TOML };
     }
 
     let backupPath: string | undefined;
-    if (exists) {
+    if (existsSync(CODEX_TOML)) {
       backupPath = backupFile(CODEX_TOML, "codex", "toml");
       logBackup(backupPath);
-    } else {
-      mkdirSync(dirname(CODEX_TOML), { recursive: true });
     }
 
-    const cleaned = wired ? stripExistingBlock(current) : current;
-    const joiner = cleaned.length === 0 || cleaned.endsWith("\n") ? "" : "\n";
-    const next = `${cleaned}${joiner}${cleaned.length > 0 ? "\n" : ""}${TOML_BLOCK}`;
-    writeFileSync(CODEX_TOML, next, "utf-8");
+    if (wired) {
+      runCodex(["mcp", "remove", MCP_NAME]);
+    }
 
-    const verify = readFileSync(CODEX_TOML, "utf-8");
-    if (!isWiredText(verify)) {
+    runCodex(buildCodexMcpAddArgs());
+
+    const verify = getExistingCodexServer();
+    if (verify === null || !getOutputLooksWired(verify)) {
       p.log.error(
-        `Verification failed: ${CODEX_TOML} did not contain ${SECTION_HEADER} after write.`,
+        `Verification failed: \`codex mcp get ${MCP_NAME}\` did not show the expected @agentmemory/mcp server.`,
       );
       return { kind: "skipped", reason: "verification-failed" };
     }
