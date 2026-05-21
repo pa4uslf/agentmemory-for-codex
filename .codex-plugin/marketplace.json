@@ -7,10 +7,8 @@
     {
       "name": "agentmemory",
       "source": {
-        "source": "git-subdir",
-        "url": "https://github.com/rohitg00/agentmemory.git",
-        "path": "./plugin",
-        "ref": "main"
+        "source": "local",
+        "path": "./plugin"
       },
       "policy": {
         "installation": "AVAILABLE",

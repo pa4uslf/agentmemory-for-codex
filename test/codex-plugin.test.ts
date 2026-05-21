@@ -143,22 +143,29 @@ describe("Codex plugin manifest (developers.openai.com/codex/plugins)", () => {
   });
 });
 
-describe("Codex marketplace.json (.agents/plugins/marketplace.json at repo root)", () => {
-  it("ships a repo-local marketplace manifest pointing at the plugin/ subdirectory", () => {
-    const marketplacePath = join(repoRoot, ".agents/plugins/marketplace.json");
-    expect(existsSync(marketplacePath)).toBe(true);
-    const marketplace = readJson<{
-      name: string;
-      plugins: Array<{
+describe("Codex marketplace.json manifests at repo root", () => {
+  for (const relPath of [
+    ".agents/plugins/marketplace.json",
+    ".codex-plugin/marketplace.json",
+  ]) {
+    it(`ships ${relPath} pointing at the local plugin/ subdirectory`, () => {
+      const marketplacePath = join(repoRoot, relPath);
+      expect(existsSync(marketplacePath)).toBe(true);
+      const marketplace = readJson<{
         name: string;
-        source: { source: string; url?: string; path: string; ref?: string };
-      }>;
-    }>(marketplacePath);
-    expect(marketplace.name).toBe("agentmemory");
-    expect(marketplace.plugins).toHaveLength(1);
-    const entry = marketplace.plugins[0];
-    expect(entry.name).toBe("agentmemory");
-    expect(entry.source.source).toBe("local");
-    expect(entry.source.path).toBe("./plugin");
-  });
+        plugins: Array<{
+          name: string;
+          source: { source: string; url?: string; path: string; ref?: string };
+        }>;
+      }>(marketplacePath);
+      expect(marketplace.name).toBe("agentmemory");
+      expect(marketplace.plugins).toHaveLength(1);
+      const entry = marketplace.plugins[0];
+      expect(entry.name).toBe("agentmemory");
+      expect(entry.source.source).toBe("local");
+      expect(entry.source.path).toBe("./plugin");
+      expect(entry.source.url).toBeUndefined();
+      expect(entry.source.ref).toBeUndefined();
+    });
+  }
 });
