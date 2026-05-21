@@ -1477,7 +1477,7 @@ async function passiveServerChecks(): Promise<DoctorCheck[]> {
         return {
           ok: false,
           hint:
-            "Plugin enabled but hooks not loaded by Claude Code. Try: /plugin uninstall agentmemory@agentmemory && /plugin install agentmemory@agentmemory, then restart the session.",
+            "Plugin enabled but hooks not loaded by Claude Code. Try removing and re-adding agentmemory@agentmemory from the plugin menu, then restart the session.",
         };
       case "no-debug-log":
         return {

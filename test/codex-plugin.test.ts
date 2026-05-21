@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { readFileSync, existsSync } from "node:fs";
+import { readFileSync, existsSync, readdirSync } from "node:fs";
 import { join, resolve } from "node:path";
 
 const repoRoot = resolve(__dirname, "..");
@@ -50,6 +50,17 @@ describe("Codex plugin manifest (developers.openai.com/codex/plugins)", () => {
     expect(manifest.skills).toBeDefined();
     expect(manifest.mcpServers).toBeDefined();
     expect(manifest.hooks).toBeDefined();
+  });
+
+  it("description skill count matches bundled skill directories", () => {
+    const manifest = readJson<{ description: string }>(
+      join(pluginRoot, ".codex-plugin/plugin.json"),
+    );
+    const skillCount = readdirSync(join(pluginRoot, "skills"), { withFileTypes: true })
+      .filter((entry) => entry.isDirectory())
+      .filter((entry) => existsSync(join(pluginRoot, "skills", entry.name, "SKILL.md")))
+      .length;
+    expect(manifest.description).toContain(`${skillCount} skills`);
   });
 
   it("manifest version matches main package.json", () => {
@@ -132,23 +143,22 @@ describe("Codex plugin manifest (developers.openai.com/codex/plugins)", () => {
   });
 });
 
-describe("Codex marketplace.json (.codex-plugin/marketplace.json at repo root)", () => {
-  it("ships a marketplace manifest pointing at the plugin/ subdirectory", () => {
-    const marketplacePath = join(repoRoot, ".codex-plugin/marketplace.json");
+describe("Codex marketplace.json (.agents/plugins/marketplace.json at repo root)", () => {
+  it("ships a repo-local marketplace manifest pointing at the plugin/ subdirectory", () => {
+    const marketplacePath = join(repoRoot, ".agents/plugins/marketplace.json");
     expect(existsSync(marketplacePath)).toBe(true);
     const marketplace = readJson<{
       name: string;
       plugins: Array<{
         name: string;
-        source: { source: string; url: string; path: string; ref?: string };
+        source: { source: string; url?: string; path: string; ref?: string };
       }>;
     }>(marketplacePath);
     expect(marketplace.name).toBe("agentmemory");
     expect(marketplace.plugins).toHaveLength(1);
     const entry = marketplace.plugins[0];
     expect(entry.name).toBe("agentmemory");
-    expect(entry.source.source).toBe("git-subdir");
+    expect(entry.source.source).toBe("local");
     expect(entry.source.path).toBe("./plugin");
-    expect(entry.source.url).toMatch(/rohitg00\/agentmemory/);
   });
 });
